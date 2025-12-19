@@ -55,7 +55,7 @@ function parseArgs(args: string[]): { url: string; options: CrawlOptions } {
       case '--depth':
       case '-d': {
         const d = parseInt(args[++i], 10)
-        options.depth = isNaN(d) ? defaults.depth : d
+        options.depth = isNaN(d) ? defaults.depth : Math.max(0, d)
         break
       }
       case '--concurrency':
