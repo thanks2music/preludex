@@ -493,8 +493,8 @@ export async function detectFrameworkFromPage(
 
       // Check HTML patterns
       const html = document.documentElement.outerHTML
-      for (const patternStr of pattern.htmlPatterns) {
-        const regex = new RegExp(patternStr)
+      for (const p of pattern.htmlPatterns) {
+        const regex = new RegExp(p.source, p.flags)
         if (regex.test(html)) {
           score += pattern.weight / 2
         }
@@ -508,7 +508,7 @@ export async function detectFrameworkFromPage(
     return scores
   }, frameworkPatterns.map(p => ({
     ...p,
-    htmlPatterns: p.htmlPatterns.map(r => r.source),
+    htmlPatterns: p.htmlPatterns.map(r => ({ source: r.source, flags: r.flags })),
   })))
 
   // Find framework with highest score
