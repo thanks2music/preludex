@@ -1,6 +1,6 @@
 {
   "name": "preludex",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "CLI tool for downloading documentation sites as Markdown files",
   "type": "module",
   "bin": {
