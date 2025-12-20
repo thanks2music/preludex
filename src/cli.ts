@@ -36,6 +36,7 @@ function parseArgs(args: string[]): { url: string; options: CrawlOptions } {
     depth: defaults.depth,
     concurrency: defaults.concurrency,
     verbose: false,
+    numbered: false,
   }
 
   for (let i = 1; i < args.length; i++) {
@@ -67,6 +68,9 @@ function parseArgs(args: string[]): { url: string; options: CrawlOptions } {
       case '--verbose':
         options.verbose = true
         break
+      case '--numbered':
+        options.numbered = true
+        break
     }
   }
 
@@ -89,6 +93,7 @@ Options:
   --concurrency, -c <n> Parallel requests (default: 3)
   --use-jina            Use Jina Reader API (external, opt-in)
   --use-sitemap         Use sitemap.xml for URL discovery
+  --numbered            Add numbered prefixes to filenames (e.g., 01-index.md)
   --verbose             Show detailed output
   --help, -h            Show this help
   --version, -v         Show version

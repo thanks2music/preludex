@@ -1,5 +1,11 @@
 import pLimit from 'p-limit'
-import { normalizePageUrl, toLocalPath, detectBasePath } from './url.js'
+import {
+  normalizePageUrl,
+  toLocalPath,
+  detectBasePath,
+  getDirectoryPath,
+  addNumberedPrefix,
+} from './url.js'
 import { extractDocLinks } from './md.js'
 import { saveFile } from './fs.js'
 import { fetchWithFallback, closeBrowser, type CrawlOptions } from './adapters/index.js'
@@ -15,6 +21,23 @@ interface BlockedPage {
 }
 
 /**
+ * Directory-based counter for numbered filenames
+ */
+class NumberedCounter {
+  private counters = new Map<string, number>()
+
+  /**
+   * Get next number for a directory and increment counter
+   */
+  next(dir: string): number {
+    const current = this.counters.get(dir) ?? 0
+    const next = current + 1
+    this.counters.set(dir, next)
+    return next
+  }
+}
+
+/**
  * Crawl a documentation site and save as markdown files
  */
 export async function crawl(entry: string, options: CrawlOptions): Promise<void> {
@@ -22,6 +45,9 @@ export async function crawl(entry: string, options: CrawlOptions): Promise<void>
   const visited = new Set<string>()
   const failed: string[] = []
   const blocked: BlockedPage[] = []
+
+  // Numbered filename counter (per-directory)
+  const counter = options.numbered ? new NumberedCounter() : null
 
   // Concurrency limiter
   const limit = pLimit(options.concurrency || 3)
@@ -36,10 +62,10 @@ export async function crawl(entry: string, options: CrawlOptions): Promise<void>
   try {
     // Sitemap mode
     if (options.useSitemap) {
-      await crawlWithSitemap(entryUrl, options, limit, visited, failed, blocked)
+      await crawlWithSitemap(entryUrl, options, limit, visited, failed, blocked, counter)
     } else {
       // Link crawl mode (default)
-      await crawlWithLinks(entryUrl, options, limit, visited, failed, blocked)
+      await crawlWithLinks(entryUrl, options, limit, visited, failed, blocked, counter)
     }
 
     // Summary
@@ -76,7 +102,8 @@ async function crawlWithSitemap(
   limit: ReturnType<typeof pLimit>,
   visited: Set<string>,
   failed: string[],
-  blocked: BlockedPage[]
+  blocked: BlockedPage[],
+  counter: NumberedCounter | null
 ): Promise<void> {
   console.log('Using sitemap.xml for URL discovery')
   console.log('')
@@ -113,7 +140,16 @@ async function crawlWithSitemap(
 
           try {
             const result = await fetchWithFallback(url, options)
-            const path = `${options.outDir}/${toLocalPath(url)}`
+            let localPath = toLocalPath(url)
+
+            // Add numbered prefix if enabled
+            if (counter) {
+              const dir = getDirectoryPath(localPath)
+              const num = counter.next(dir)
+              localPath = addNumberedPrefix(localPath, num)
+            }
+
+            const path = `${options.outDir}/${localPath}`
             await saveFile(path, result.content)
             console.log(`[${result.adapter}] Saved: ${path}`)
           } catch (error) {
@@ -141,7 +177,8 @@ async function crawlWithLinks(
   limit: ReturnType<typeof pLimit>,
   visited: Set<string>,
   failed: string[],
-  blocked: BlockedPage[]
+  blocked: BlockedPage[],
+  counter: NumberedCounter | null
 ): Promise<void> {
   console.log('')
 
@@ -149,7 +186,16 @@ async function crawlWithLinks(
   const { content, adapter } = await fetchWithFallback(entryUrl, options)
   visited.add(entryUrl.toString())
 
-  const localPath = `${options.outDir}/${toLocalPath(entryUrl)}`
+  let entryLocalPath = toLocalPath(entryUrl)
+
+  // Add numbered prefix if enabled
+  if (counter) {
+    const dir = getDirectoryPath(entryLocalPath)
+    const num = counter.next(dir)
+    entryLocalPath = addNumberedPrefix(entryLocalPath, num)
+  }
+
+  const localPath = `${options.outDir}/${entryLocalPath}`
   await saveFile(localPath, content)
   console.log(`[${adapter}] Saved: ${localPath}`)
 
@@ -179,7 +225,16 @@ async function crawlWithLinks(
 
           try {
             const result = await fetchWithFallback(url, options)
-            const path = `${options.outDir}/${toLocalPath(url)}`
+            let pagePath = toLocalPath(url)
+
+            // Add numbered prefix if enabled
+            if (counter) {
+              const dir = getDirectoryPath(pagePath)
+              const num = counter.next(dir)
+              pagePath = addNumberedPrefix(pagePath, num)
+            }
+
+            const path = `${options.outDir}/${pagePath}`
             await saveFile(path, result.content)
             console.log(`[${result.adapter}] Saved: ${path}`)
 

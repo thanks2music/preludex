@@ -33,6 +33,9 @@ export interface CrawlOptions {
 
   /** Verbose logging */
   verbose?: boolean
+
+  /** Add numbered prefixes to filenames (e.g., 01-index.md) */
+  numbered?: boolean
 }
 
 /**

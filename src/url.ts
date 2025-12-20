@@ -76,3 +76,30 @@ export function toLocalPath(pageUrl: URL): string {
 
   return dir ? `${dir}/${fileName}` : fileName
 }
+
+/**
+ * Get directory path from a file path
+ * e.g., 'guides/config.md' -> 'guides', 'index.md' -> ''
+ */
+export function getDirectoryPath(filePath: string): string {
+  const lastSlash = filePath.lastIndexOf('/')
+  return lastSlash === -1 ? '' : filePath.substring(0, lastSlash)
+}
+
+/**
+ * Add numbered prefix to a file path
+ * e.g., addNumberedPrefix('guides/config.md', 3, 2) -> 'guides/03-config.md'
+ */
+export function addNumberedPrefix(filePath: string, num: number, digits = 2): string {
+  const prefix = String(num).padStart(digits, '0')
+  const lastSlash = filePath.lastIndexOf('/')
+
+  if (lastSlash === -1) {
+    // No directory, just filename
+    return `${prefix}-${filePath}`
+  }
+
+  const dir = filePath.substring(0, lastSlash)
+  const fileName = filePath.substring(lastSlash + 1)
+  return `${dir}/${prefix}-${fileName}`
+}
