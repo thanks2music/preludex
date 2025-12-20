@@ -2,12 +2,28 @@ import { docPatterns } from './config/patterns.js'
 
 /**
  * Normalize a URL by removing hash and search params
+ * Note: Preserves trailing slashes to avoid 404s on servers that distinguish /path/ vs /path
  */
 export function normalizePageUrl(input: string): URL {
   const url = new URL(input)
   url.hash = ''
   url.search = ''
   return url
+}
+
+/**
+ * Normalize a URL for use as deduplication key (visited/queued sets)
+ * Removes hash, search params, and trailing slashes for consistent comparison
+ */
+export function normalizeForKey(input: string | URL): string {
+  const url = typeof input === 'string' ? new URL(input) : new URL(input.toString())
+  url.hash = ''
+  url.search = ''
+  // Normalize trailing slash (remove unless it's root path)
+  if (url.pathname.length > 1 && url.pathname.endsWith('/')) {
+    url.pathname = url.pathname.slice(0, -1)
+  }
+  return url.toString()
 }
 
 /**
@@ -75,4 +91,31 @@ export function toLocalPath(pageUrl: URL): string {
   const fileName = `${file}.md`
 
   return dir ? `${dir}/${fileName}` : fileName
+}
+
+/**
+ * Get directory path from a file path
+ * e.g., 'guides/config.md' -> 'guides', 'index.md' -> ''
+ */
+export function getDirectoryPath(filePath: string): string {
+  const lastSlash = filePath.lastIndexOf('/')
+  return lastSlash === -1 ? '' : filePath.substring(0, lastSlash)
+}
+
+/**
+ * Add numbered prefix to a file path
+ * e.g., addNumberedPrefix('guides/config.md', 3, 2) -> 'guides/03-config.md'
+ */
+export function addNumberedPrefix(filePath: string, num: number, digits = 2): string {
+  const prefix = String(num).padStart(digits, '0')
+  const lastSlash = filePath.lastIndexOf('/')
+
+  if (lastSlash === -1) {
+    // No directory, just filename
+    return `${prefix}-${filePath}`
+  }
+
+  const dir = filePath.substring(0, lastSlash)
+  const fileName = filePath.substring(lastSlash + 1)
+  return `${dir}/${prefix}-${fileName}`
 }

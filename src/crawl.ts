@@ -1,9 +1,42 @@
 import pLimit from 'p-limit'
-import { normalizePageUrl, toLocalPath, detectBasePath } from './url.js'
+import {
+  normalizePageUrl,
+  normalizeForKey,
+  toLocalPath,
+  detectBasePath,
+  getDirectoryPath,
+  addNumberedPrefix,
+} from './url.js'
 import { extractDocLinks } from './md.js'
 import { saveFile } from './fs.js'
 import { fetchWithFallback, closeBrowser, type CrawlOptions } from './adapters/index.js'
 import { parseSitemap, findSitemapUrl, filterByBasePath } from './sitemap.js'
+import { BlockedContentError } from './errors.js'
+
+/**
+ * Statistics for blocked pages
+ */
+interface BlockedPage {
+  url: string
+  reason: string
+}
+
+/**
+ * Directory-based counter for numbered filenames
+ */
+class NumberedCounter {
+  private counters = new Map<string, number>()
+
+  /**
+   * Get next number for a directory and increment counter
+   */
+  next(dir: string): number {
+    const current = this.counters.get(dir) ?? 0
+    const next = current + 1
+    this.counters.set(dir, next)
+    return next
+  }
+}
 
 /**
  * Crawl a documentation site and save as markdown files
@@ -12,6 +45,10 @@ export async function crawl(entry: string, options: CrawlOptions): Promise<void>
   const entryUrl = normalizePageUrl(entry)
   const visited = new Set<string>()
   const failed: string[] = []
+  const blocked: BlockedPage[] = []
+
+  // Numbered filename counter (per-directory)
+  const counter = options.numbered ? new NumberedCounter() : null
 
   // Concurrency limiter
   const limit = pLimit(options.concurrency || 3)
@@ -26,16 +63,25 @@ export async function crawl(entry: string, options: CrawlOptions): Promise<void>
   try {
     // Sitemap mode
     if (options.useSitemap) {
-      await crawlWithSitemap(entryUrl, options, limit, visited, failed)
+      await crawlWithSitemap(entryUrl, options, limit, visited, failed, blocked, counter)
     } else {
       // Link crawl mode (default)
-      await crawlWithLinks(entryUrl, options, limit, visited, failed)
+      await crawlWithLinks(entryUrl, options, limit, visited, failed, blocked, counter)
     }
 
     // Summary
     console.log('')
     console.log('='.repeat(50))
     console.log(`Done! Saved ${visited.size} pages to ${options.outDir}`)
+
+    if (blocked.length > 0) {
+      console.log(`Blocked: ${blocked.length} pages (bot protection detected)`)
+      if (options.verbose) {
+        blocked.forEach((b) => console.log(`  - ${b.url} (${b.reason})`))
+      }
+      console.log('Tip: Try --use-jina for sites with bot protection')
+    }
+
     if (failed.length > 0) {
       console.log(`Failed: ${failed.length} pages`)
       if (options.verbose) {
@@ -56,7 +102,9 @@ async function crawlWithSitemap(
   options: CrawlOptions,
   limit: ReturnType<typeof pLimit>,
   visited: Set<string>,
-  failed: string[]
+  failed: string[],
+  blocked: BlockedPage[],
+  counter: NumberedCounter | null
 ): Promise<void> {
   console.log('Using sitemap.xml for URL discovery')
   console.log('')
@@ -87,19 +135,33 @@ async function crawlWithSitemap(
     await Promise.all(
       batch.map((url) =>
         limit(async () => {
-          const urlStr = url.toString()
-          if (visited.has(urlStr)) return
-          visited.add(urlStr)
+          const urlKey = normalizeForKey(url)
+          if (visited.has(urlKey)) return
+          visited.add(urlKey)
 
           try {
             const result = await fetchWithFallback(url, options)
-            const path = `${options.outDir}/${toLocalPath(url)}`
+            let localPath = toLocalPath(url)
+
+            // Add numbered prefix if enabled
+            if (counter) {
+              const dir = getDirectoryPath(localPath)
+              const num = counter.next(dir)
+              localPath = addNumberedPrefix(localPath, num)
+            }
+
+            const path = `${options.outDir}/${localPath}`
             await saveFile(path, result.content)
             console.log(`[${result.adapter}] Saved: ${path}`)
           } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error)
-            console.warn(`Failed: ${url} - ${msg}`)
-            failed.push(urlStr)
+            if (error instanceof BlockedContentError) {
+              blocked.push({ url: url.toString(), reason: error.reason })
+              console.warn(`  [blocked] ${url.hostname} - ${error.reason}`)
+            } else {
+              const msg = error instanceof Error ? error.message : String(error)
+              console.warn(`Failed: ${url} - ${msg}`)
+              failed.push(url.toString())
+            }
           }
         })
       )
@@ -115,15 +177,26 @@ async function crawlWithLinks(
   options: CrawlOptions,
   limit: ReturnType<typeof pLimit>,
   visited: Set<string>,
-  failed: string[]
+  failed: string[],
+  blocked: BlockedPage[],
+  counter: NumberedCounter | null
 ): Promise<void> {
   console.log('')
 
   // Fetch entry page
   const { content, adapter } = await fetchWithFallback(entryUrl, options)
-  visited.add(entryUrl.toString())
+  visited.add(normalizeForKey(entryUrl))
 
-  const localPath = `${options.outDir}/${toLocalPath(entryUrl)}`
+  let entryLocalPath = toLocalPath(entryUrl)
+
+  // Add numbered prefix if enabled
+  if (counter) {
+    const dir = getDirectoryPath(entryLocalPath)
+    const num = counter.next(dir)
+    entryLocalPath = addNumberedPrefix(entryLocalPath, num)
+  }
+
+  const localPath = `${options.outDir}/${entryLocalPath}`
   await saveFile(localPath, content)
   console.log(`[${adapter}] Saved: ${localPath}`)
 
@@ -133,8 +206,15 @@ async function crawlWithLinks(
 
   // BFS crawl with depth limit
   const maxDepth = options.depth ?? 1
+
+  // Filter out already-visited URLs (e.g., entry page itself)
+  const unvisitedLinks = links.filter((url) => !visited.has(normalizeForKey(url)))
+
   const queue: Array<{ url: URL; depth: number }> =
-    maxDepth > 0 ? links.map((url) => ({ url, depth: 1 })) : []
+    maxDepth > 0 ? unvisitedLinks.map((url) => ({ url, depth: 1 })) : []
+
+  // Track URLs already in queue to prevent duplicates during parallel processing
+  const queued = new Set<string>(unvisitedLinks.map((url) => normalizeForKey(url)))
 
   while (queue.length > 0) {
     // Process in batches
@@ -144,16 +224,26 @@ async function crawlWithLinks(
       batch.map((item) =>
         limit(async () => {
           const { url, depth } = item
+          const urlKey = normalizeForKey(url)
 
           // Skip if already visited
-          if (visited.has(url.toString())) {
+          if (visited.has(urlKey)) {
             return
           }
-          visited.add(url.toString())
+          visited.add(urlKey)
 
           try {
             const result = await fetchWithFallback(url, options)
-            const path = `${options.outDir}/${toLocalPath(url)}`
+            let pagePath = toLocalPath(url)
+
+            // Add numbered prefix if enabled
+            if (counter) {
+              const dir = getDirectoryPath(pagePath)
+              const num = counter.next(dir)
+              pagePath = addNumberedPrefix(pagePath, num)
+            }
+
+            const path = `${options.outDir}/${pagePath}`
             await saveFile(path, result.content)
             console.log(`[${result.adapter}] Saved: ${path}`)
 
@@ -161,15 +251,23 @@ async function crawlWithLinks(
             if (depth < maxDepth) {
               const newLinks = extractDocLinks(result.content, url)
               for (const link of newLinks) {
-                if (!visited.has(link.toString())) {
+                const linkKey = normalizeForKey(link)
+                // Check both visited and queued to prevent duplicates
+                if (!visited.has(linkKey) && !queued.has(linkKey)) {
                   queue.push({ url: link, depth: depth + 1 })
+                  queued.add(linkKey)
                 }
               }
             }
           } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error)
-            console.warn(`Failed: ${url} - ${msg}`)
-            failed.push(url.toString())
+            if (error instanceof BlockedContentError) {
+              blocked.push({ url: url.toString(), reason: error.reason })
+              console.warn(`  [blocked] ${url.hostname} - ${error.reason}`)
+            } else {
+              const msg = error instanceof Error ? error.message : String(error)
+              console.warn(`Failed: ${url} - ${msg}`)
+              failed.push(url.toString())
+            }
           }
         })
       )

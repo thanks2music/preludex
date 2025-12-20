@@ -33,9 +33,11 @@ function parseArgs(args: string[]): { url: string; options: CrawlOptions } {
     outDir: defaults.outDir,
     useJina: false,
     useSitemap: false,
+    useMdEndpoint: false,
     depth: defaults.depth,
     concurrency: defaults.concurrency,
     verbose: false,
+    numbered: false,
   }
 
   for (let i = 1; i < args.length; i++) {
@@ -52,6 +54,9 @@ function parseArgs(args: string[]): { url: string; options: CrawlOptions } {
       case '--use-sitemap':
         options.useSitemap = true
         break
+      case '--use-md-endpoint':
+        options.useMdEndpoint = true
+        break
       case '--depth':
       case '-d': {
         const d = parseInt(args[++i], 10)
@@ -66,6 +71,9 @@ function parseArgs(args: string[]): { url: string; options: CrawlOptions } {
       }
       case '--verbose':
         options.verbose = true
+        break
+      case '--numbered':
+        options.numbered = true
         break
     }
   }
@@ -89,6 +97,8 @@ Options:
   --concurrency, -c <n> Parallel requests (default: 3)
   --use-jina            Use Jina Reader API (external, opt-in)
   --use-sitemap         Use sitemap.xml for URL discovery
+  --use-md-endpoint     Use .md endpoint (auto-enabled for Claude/OpenAI Codex docs)
+  --numbered            Add numbered prefixes to filenames (e.g., 01-index.md)
   --verbose             Show detailed output
   --help, -h            Show this help
   --version, -v         Show version

@@ -51,10 +51,26 @@ export function extractDocLinks(
           continue
         }
 
+        // Skip markdown autolinks: <https://...> or URL-encoded versions (at start only)
+        if (raw.startsWith('<') || raw.startsWith('%3C')) {
+          continue
+        }
+
         const url = new URL(raw, base)
 
         // Same origin check
-        if (url.origin !== base.origin && !options.includeExternal) {
+        const isExternal = url.origin !== base.origin
+        if (isExternal && !options.includeExternal) {
+          continue
+        }
+
+        // Skip badge/image service domains (external links only)
+        if (
+          isExternal &&
+          (url.hostname.includes('shields.io') ||
+            url.hostname.includes('badge') ||
+            url.hostname.includes('img.'))
+        ) {
           continue
         }
 
@@ -68,6 +84,9 @@ export function extractDocLinks(
           continue
         }
 
+        // Remove hash and search params for consistency
+        url.hash = ''
+        url.search = ''
         links.add(url.toString())
       } catch {
         // Invalid URL, skip
