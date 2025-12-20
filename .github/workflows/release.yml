@@ -5,12 +5,13 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  id-token: write   # Required for OIDC
+  contents: write   # Required for creating GitHub releases
+
 jobs:
   release:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write   # Required for creating GitHub releases
-      id-token: write   # Required for npm provenance (OIDC)
 
     steps:
       - name: Checkout
@@ -24,8 +25,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          # Note: registry-url is omitted for Trusted Publisher (OIDC) auth
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: bun install
@@ -34,7 +35,7 @@ jobs:
         run: bun run build
 
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        run: npm publish
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
