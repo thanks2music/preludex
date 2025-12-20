@@ -16,6 +16,12 @@ export interface SiteConfig {
 
   /** Optional: Base path for docs (e.g., '/docs/') */
   docsBasePath?: string
+
+  /** Optional: Wait until strategy for page.goto (default: 'domcontentloaded') */
+  waitUntil?: 'domcontentloaded' | 'networkidle' | 'load' | 'commit'
+
+  /** Optional: Site may block headless browsers (Cloudflare, etc.) */
+  mayRequireJina?: boolean
 }
 
 /**
@@ -57,6 +63,7 @@ export const siteConfigs: Record<string, SiteConfig> = {
   },
 
   // OpenAI Platform Docs
+  // Note: May be blocked by Cloudflare bot detection in headless mode
   'platform.openai.com': {
     contentSelector: 'main',
     removeSelectors: [
@@ -64,13 +71,16 @@ export const siteConfigs: Record<string, SiteConfig> = {
       'header',
       'footer',
       '[role="navigation"]',
+      '[role="complementary"]',
       '.sidebar',
       '.toc',
       '.breadcrumb',
     ],
-    waitForSelector: 'main',
+    waitForSelector: 'main h1',
+    waitUntil: 'networkidle',
     framework: 'custom',
     docsBasePath: '/docs/',
+    mayRequireJina: true,
   },
 
   // xAI Docs
