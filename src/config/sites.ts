@@ -135,7 +135,8 @@ export const siteConfigs: Record<string, SiteConfig> = {
     removeSelectors: [
       'nav',
       'header',
-      'footer',
+      // Note: 'footer' is NOT removed to preserve pagination links (Next/Previous)
+      // Site footer is typically outside contentSelector anyway
       '.sidebar',
       '.right-sidebar',
       'script',
@@ -145,7 +146,6 @@ export const siteConfigs: Record<string, SiteConfig> = {
       'astro-breadcrumbs',
       '[data-application-name]',
       '.feedback-widget',
-      '.page-footer',
       '.copy-button',
     ],
     waitForSelector: '.sl-markdown-content, article',
