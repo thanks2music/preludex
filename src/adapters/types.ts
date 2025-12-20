@@ -36,6 +36,9 @@ export interface CrawlOptions {
 
   /** Add numbered prefixes to filenames (e.g., 01-index.md) */
   numbered?: boolean
+
+  /** Use .md endpoint for sites that support it (e.g., Stainless-powered docs) */
+  useMdEndpoint?: boolean
 }
 
 /**

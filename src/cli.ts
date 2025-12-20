@@ -33,6 +33,7 @@ function parseArgs(args: string[]): { url: string; options: CrawlOptions } {
     outDir: defaults.outDir,
     useJina: false,
     useSitemap: false,
+    useMdEndpoint: false,
     depth: defaults.depth,
     concurrency: defaults.concurrency,
     verbose: false,
@@ -52,6 +53,9 @@ function parseArgs(args: string[]): { url: string; options: CrawlOptions } {
         break
       case '--use-sitemap':
         options.useSitemap = true
+        break
+      case '--use-md-endpoint':
+        options.useMdEndpoint = true
         break
       case '--depth':
       case '-d': {
@@ -93,6 +97,7 @@ Options:
   --concurrency, -c <n> Parallel requests (default: 3)
   --use-jina            Use Jina Reader API (external, opt-in)
   --use-sitemap         Use sitemap.xml for URL discovery
+  --use-md-endpoint     Use .md endpoint for supported sites (e.g., Claude Docs)
   --numbered            Add numbered prefixes to filenames (e.g., 01-index.md)
   --verbose             Show detailed output
   --help, -h            Show this help

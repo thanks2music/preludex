@@ -1,10 +1,12 @@
 export type { SiteAdapter, CrawlOptions, FetchResult } from './types.js'
 export { mdxAdapter } from './mdx.js'
+export { mdEndpointAdapter } from './md-endpoint.js'
 export { playwrightAdapter, closeBrowser } from './playwright.js'
 export { jinaAdapter } from './jina.js'
 
 import type { SiteAdapter, CrawlOptions } from './types.js'
 import { mdxAdapter } from './mdx.js'
+import { mdEndpointAdapter, supportsMdEndpoint } from './md-endpoint.js'
 import { playwrightAdapter } from './playwright.js'
 import { jinaAdapter } from './jina.js'
 
@@ -12,13 +14,15 @@ import { jinaAdapter } from './jina.js'
  * Fetch markdown content with fallback strategy
  *
  * Default mode (local-only):
- * 1. Site-specific adapter (MDX for Claude/Vercel)
- * 2. Playwright + turndown
+ * 1. MD endpoint adapter (if supported or --use-md-endpoint)
+ * 2. Site-specific adapter (MDX for Claude/Vercel)
+ * 3. Playwright + turndown
  *
  * --use-jina mode:
- * 1. Site-specific adapter
- * 2. Jina Reader API
- * 3. Playwright (fallback)
+ * 1. MD endpoint adapter (if supported or --use-md-endpoint)
+ * 2. Site-specific adapter
+ * 3. Jina Reader API
+ * 4. Playwright (fallback)
  */
 export async function fetchWithFallback(
   url: URL,
@@ -26,7 +30,24 @@ export async function fetchWithFallback(
 ): Promise<{ content: string; adapter: string }> {
   const errors: Array<{ adapter: string; error: Error }> = []
 
-  // 1. Try site-specific adapter (MDX)
+  // 1. Try MD endpoint adapter (if enabled or auto-detected)
+  const shouldTryMdEndpoint = options.useMdEndpoint || supportsMdEndpoint(url.hostname)
+  if (shouldTryMdEndpoint) {
+    try {
+      if (options.verbose) {
+        console.log(`Trying adapter: ${mdEndpointAdapter.name}`)
+      }
+      const content = await mdEndpointAdapter.fetchMarkdown(url)
+      return { content, adapter: mdEndpointAdapter.name }
+    } catch (error) {
+      errors.push({ adapter: mdEndpointAdapter.name, error: error as Error })
+      if (options.verbose) {
+        console.warn(`${mdEndpointAdapter.name} failed:`, (error as Error).message)
+      }
+    }
+  }
+
+  // 2. Try site-specific adapter (MDX)
   if (mdxAdapter.match(url)) {
     try {
       if (options.verbose) {
@@ -42,7 +63,7 @@ export async function fetchWithFallback(
     }
   }
 
-  // 2. Try Jina Reader if enabled (opt-in)
+  // 3. Try Jina Reader if enabled (opt-in)
   if (options.useJina) {
     try {
       if (options.verbose) {
@@ -59,7 +80,7 @@ export async function fetchWithFallback(
     }
   }
 
-  // 3. Playwright adapter (default/fallback)
+  // 4. Playwright adapter (default/fallback)
   try {
     if (options.verbose) {
       console.log(`Trying adapter: ${playwrightAdapter.name}`)
@@ -81,7 +102,12 @@ export async function fetchWithFallback(
  * Get the appropriate adapter for a URL based on options
  */
 export function getAdapter(url: URL, options: CrawlOptions): SiteAdapter {
-  // MDX sites always use MDX adapter
+  // MD endpoint if enabled or auto-detected
+  if (options.useMdEndpoint || supportsMdEndpoint(url.hostname)) {
+    return mdEndpointAdapter
+  }
+
+  // MDX sites use MDX adapter
   if (mdxAdapter.match(url)) {
     return mdxAdapter
   }
