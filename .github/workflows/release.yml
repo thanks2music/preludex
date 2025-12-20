@@ -9,7 +9,8 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Required for creating GitHub releases
+      contents: write   # Required for creating GitHub releases
+      id-token: write   # Required for npm provenance (OIDC)
 
     steps:
       - name: Checkout
@@ -33,9 +34,7 @@ jobs:
         run: bun run build
 
       - name: Publish to npm
-        run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
