@@ -1,6 +1,7 @@
 import pLimit from 'p-limit'
 import {
   normalizePageUrl,
+  normalizeForKey,
   toLocalPath,
   detectBasePath,
   getDirectoryPath,
@@ -134,9 +135,9 @@ async function crawlWithSitemap(
     await Promise.all(
       batch.map((url) =>
         limit(async () => {
-          const urlStr = url.toString()
-          if (visited.has(urlStr)) return
-          visited.add(urlStr)
+          const urlKey = normalizeForKey(url)
+          if (visited.has(urlKey)) return
+          visited.add(urlKey)
 
           try {
             const result = await fetchWithFallback(url, options)
@@ -154,12 +155,12 @@ async function crawlWithSitemap(
             console.log(`[${result.adapter}] Saved: ${path}`)
           } catch (error) {
             if (error instanceof BlockedContentError) {
-              blocked.push({ url: urlStr, reason: error.reason })
+              blocked.push({ url: url.toString(), reason: error.reason })
               console.warn(`  [blocked] ${url.hostname} - ${error.reason}`)
             } else {
               const msg = error instanceof Error ? error.message : String(error)
               console.warn(`Failed: ${url} - ${msg}`)
-              failed.push(urlStr)
+              failed.push(url.toString())
             }
           }
         })
@@ -184,7 +185,7 @@ async function crawlWithLinks(
 
   // Fetch entry page
   const { content, adapter } = await fetchWithFallback(entryUrl, options)
-  visited.add(entryUrl.toString())
+  visited.add(normalizeForKey(entryUrl))
 
   let entryLocalPath = toLocalPath(entryUrl)
 
@@ -207,13 +208,13 @@ async function crawlWithLinks(
   const maxDepth = options.depth ?? 1
 
   // Filter out already-visited URLs (e.g., entry page itself)
-  const unvisitedLinks = links.filter((url) => !visited.has(url.toString()))
+  const unvisitedLinks = links.filter((url) => !visited.has(normalizeForKey(url)))
 
   const queue: Array<{ url: URL; depth: number }> =
     maxDepth > 0 ? unvisitedLinks.map((url) => ({ url, depth: 1 })) : []
 
   // Track URLs already in queue to prevent duplicates during parallel processing
-  const queued = new Set<string>(unvisitedLinks.map((url) => url.toString()))
+  const queued = new Set<string>(unvisitedLinks.map((url) => normalizeForKey(url)))
 
   while (queue.length > 0) {
     // Process in batches
@@ -223,12 +224,13 @@ async function crawlWithLinks(
       batch.map((item) =>
         limit(async () => {
           const { url, depth } = item
+          const urlKey = normalizeForKey(url)
 
           // Skip if already visited
-          if (visited.has(url.toString())) {
+          if (visited.has(urlKey)) {
             return
           }
-          visited.add(url.toString())
+          visited.add(urlKey)
 
           try {
             const result = await fetchWithFallback(url, options)
@@ -249,11 +251,11 @@ async function crawlWithLinks(
             if (depth < maxDepth) {
               const newLinks = extractDocLinks(result.content, url)
               for (const link of newLinks) {
-                const linkStr = link.toString()
+                const linkKey = normalizeForKey(link)
                 // Check both visited and queued to prevent duplicates
-                if (!visited.has(linkStr) && !queued.has(linkStr)) {
+                if (!visited.has(linkKey) && !queued.has(linkKey)) {
                   queue.push({ url: link, depth: depth + 1 })
-                  queued.add(linkStr)
+                  queued.add(linkKey)
                 }
               }
             }

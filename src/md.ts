@@ -1,4 +1,4 @@
-import { detectBasePath, normalizePageUrl } from './url.js'
+import { detectBasePath } from './url.js'
 
 /**
  * Options for link extraction
@@ -51,44 +51,42 @@ export function extractDocLinks(
           continue
         }
 
-        // Skip markdown autolinks: <https://...> or URL-encoded versions
-        if (
-          raw.startsWith('<') ||
-          raw.startsWith('%3C') ||
-          raw.includes('%3E') ||
-          raw.includes('%3C')
-        ) {
+        // Skip markdown autolinks: <https://...> or URL-encoded versions (at start only)
+        if (raw.startsWith('<') || raw.startsWith('%3C')) {
           continue
         }
 
-        const rawUrl = new URL(raw, base)
-
-        // Skip badge/image service domains
-        if (
-          rawUrl.hostname.includes('shields.io') ||
-          rawUrl.hostname.includes('badge') ||
-          rawUrl.hostname.includes('img.')
-        ) {
-          continue
-        }
+        const url = new URL(raw, base)
 
         // Same origin check
-        if (rawUrl.origin !== base.origin && !options.includeExternal) {
+        const isExternal = url.origin !== base.origin
+        if (isExternal && !options.includeExternal) {
+          continue
+        }
+
+        // Skip badge/image service domains (external links only)
+        if (
+          isExternal &&
+          (url.hostname.includes('shields.io') ||
+            url.hostname.includes('badge') ||
+            url.hostname.includes('img.'))
+        ) {
           continue
         }
 
         // Base path check (if specified)
-        if (basePath && !rawUrl.pathname.startsWith(basePath)) {
+        if (basePath && !url.pathname.startsWith(basePath)) {
           continue
         }
 
         // Skip files with extensions (images, PDFs, etc.)
-        if (rawUrl.pathname.match(/\.(png|jpg|jpeg|gif|svg|pdf|zip|tar|gz)$/i)) {
+        if (url.pathname.match(/\.(png|jpg|jpeg|gif|svg|pdf|zip|tar|gz)$/i)) {
           continue
         }
 
-        // Normalize URL (removes hash, search, trailing slashes)
-        const url = normalizePageUrl(rawUrl.toString())
+        // Remove hash and search params for consistency
+        url.hash = ''
+        url.search = ''
         links.add(url.toString())
       } catch {
         // Invalid URL, skip

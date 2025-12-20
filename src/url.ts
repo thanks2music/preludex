@@ -1,17 +1,29 @@
 import { docPatterns } from './config/patterns.js'
 
 /**
- * Normalize a URL by removing hash, search params, and trailing slashes
+ * Normalize a URL by removing hash and search params
+ * Note: Preserves trailing slashes to avoid 404s on servers that distinguish /path/ vs /path
  */
 export function normalizePageUrl(input: string): URL {
   const url = new URL(input)
+  url.hash = ''
+  url.search = ''
+  return url
+}
+
+/**
+ * Normalize a URL for use as deduplication key (visited/queued sets)
+ * Removes hash, search params, and trailing slashes for consistent comparison
+ */
+export function normalizeForKey(input: string | URL): string {
+  const url = typeof input === 'string' ? new URL(input) : new URL(input.toString())
   url.hash = ''
   url.search = ''
   // Normalize trailing slash (remove unless it's root path)
   if (url.pathname.length > 1 && url.pathname.endsWith('/')) {
     url.pathname = url.pathname.slice(0, -1)
   }
-  return url
+  return url.toString()
 }
 
 /**
