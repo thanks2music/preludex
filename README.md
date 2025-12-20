@@ -1,5 +1,7 @@
 # preludex
 
+[![npm version](https://img.shields.io/npm/v/preludex.svg)](https://www.npmjs.com/package/preludex)
+
 A CLI tool for downloading documentation sites as clean Markdown files. Perfect for offline reading, LLM/AI knowledge bases, and local search.
 
 ## Features
@@ -8,8 +10,9 @@ A CLI tool for downloading documentation sites as clean Markdown files. Perfect 
 - **Clean Markdown Output** - Converts HTML to well-formatted Markdown with proper heading structure
 - **Link Crawling** - Follows internal links with configurable depth control
 - **Sitemap Support** - Bulk download using sitemap.xml
-- **Multiple Adapters** - Playwright (default), Jina Reader API, and direct MDX fetching
+- **Multiple Adapters** - Playwright (default), MD Endpoint, Jina Reader API, and direct MDX fetching
 - **Parallel Processing** - Configurable concurrency for faster downloads
+- **Numbered Output** - Optional sequential prefixes for ordered file naming (e.g., `01-intro.md`, `02-setup.md`)
 
 ## Supported Frameworks
 
@@ -62,6 +65,25 @@ preludex https://example.com/docs --depth 3 --out docs/example
 preludex https://example.com/docs --use-sitemap --out docs/example
 ```
 
+### Using MD Endpoint
+
+```bash
+# Automatically uses MD endpoint for supported sites (Stainless-powered docs)
+preludex https://docs.anthropic.com/en/docs --out docs/anthropic
+
+# Force MD endpoint for other compatible sites
+preludex https://example.com/docs --use-md-endpoint --out docs/example
+```
+
+### Numbered Output
+
+```bash
+# Add sequential prefixes to filenames (useful for ordered documentation)
+preludex https://example.com/docs --numbered --out docs/example
+
+# Output: 01-getting-started.md, 02-installation.md, 03-configuration.md, ...
+```
+
 ### Using Jina Reader API
 
 ```bash
@@ -78,6 +100,8 @@ preludex https://example.com/docs --use-jina --out docs/example
 | `--concurrency` | `-c` | `3` | Number of parallel requests |
 | `--use-sitemap` | | `false` | Use sitemap.xml for URL discovery |
 | `--use-jina` | | `false` | Use Jina Reader API instead of Playwright |
+| `--use-md-endpoint` | | `false` | Fetch .md files directly (auto-enabled for supported sites) |
+| `--numbered` | | `false` | Add numbered prefixes to filenames (e.g., `01-index.md`) |
 | `--verbose` | | `false` | Show detailed output |
 | `--help` | `-h` | | Show help |
 | `--version` | `-v` | | Show version |
@@ -122,11 +146,16 @@ preludex uses different adapters based on the target site:
 
 | Adapter | Use Case | Method |
 |---------|----------|--------|
+| **MD Endpoint** | Stainless-powered docs | Direct .md file fetch |
 | **Playwright** | Most sites (default) | Headless browser rendering |
 | **MDX** | Claude Docs, Vercel, Next.js | Direct .md/.mdx file fetch |
 | **Jina** | Fallback / API-based | Jina Reader API |
 
-The adapter is automatically selected, but you can force Jina with `--use-jina`.
+The adapter is automatically selected based on the target site:
+
+- **MD Endpoint** is auto-enabled for: `docs.anthropic.com`, `docs.claude.com`, `code.claude.com`, `developers.openai.com`
+- Use `--use-md-endpoint` to force this adapter for other Stainless-powered documentation sites
+- Use `--use-jina` to use the Jina Reader API
 
 ## Environment Variables
 
