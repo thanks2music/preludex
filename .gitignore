@@ -143,5 +143,7 @@ vite.config.ts.timestamp-*
 # Documents
 reference/*
 docs/review/*
+docs/report/*
 debug/
 **/*/debug/
+docs/
