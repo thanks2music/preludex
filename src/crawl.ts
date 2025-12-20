@@ -205,8 +205,15 @@ async function crawlWithLinks(
 
   // BFS crawl with depth limit
   const maxDepth = options.depth ?? 1
+
+  // Filter out already-visited URLs (e.g., entry page itself)
+  const unvisitedLinks = links.filter((url) => !visited.has(url.toString()))
+
   const queue: Array<{ url: URL; depth: number }> =
-    maxDepth > 0 ? links.map((url) => ({ url, depth: 1 })) : []
+    maxDepth > 0 ? unvisitedLinks.map((url) => ({ url, depth: 1 })) : []
+
+  // Track URLs already in queue to prevent duplicates during parallel processing
+  const queued = new Set<string>(unvisitedLinks.map((url) => url.toString()))
 
   while (queue.length > 0) {
     // Process in batches
@@ -242,8 +249,11 @@ async function crawlWithLinks(
             if (depth < maxDepth) {
               const newLinks = extractDocLinks(result.content, url)
               for (const link of newLinks) {
-                if (!visited.has(link.toString())) {
+                const linkStr = link.toString()
+                // Check both visited and queued to prevent duplicates
+                if (!visited.has(linkStr) && !queued.has(linkStr)) {
                   queue.push({ url: link, depth: depth + 1 })
+                  queued.add(linkStr)
                 }
               }
             }

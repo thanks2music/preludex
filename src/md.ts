@@ -1,4 +1,4 @@
-import { detectBasePath } from './url.js'
+import { detectBasePath, normalizePageUrl } from './url.js'
 
 /**
  * Options for link extraction
@@ -51,23 +51,44 @@ export function extractDocLinks(
           continue
         }
 
-        const url = new URL(raw, base)
+        // Skip markdown autolinks: <https://...> or URL-encoded versions
+        if (
+          raw.startsWith('<') ||
+          raw.startsWith('%3C') ||
+          raw.includes('%3E') ||
+          raw.includes('%3C')
+        ) {
+          continue
+        }
+
+        const rawUrl = new URL(raw, base)
+
+        // Skip badge/image service domains
+        if (
+          rawUrl.hostname.includes('shields.io') ||
+          rawUrl.hostname.includes('badge') ||
+          rawUrl.hostname.includes('img.')
+        ) {
+          continue
+        }
 
         // Same origin check
-        if (url.origin !== base.origin && !options.includeExternal) {
+        if (rawUrl.origin !== base.origin && !options.includeExternal) {
           continue
         }
 
         // Base path check (if specified)
-        if (basePath && !url.pathname.startsWith(basePath)) {
+        if (basePath && !rawUrl.pathname.startsWith(basePath)) {
           continue
         }
 
         // Skip files with extensions (images, PDFs, etc.)
-        if (url.pathname.match(/\.(png|jpg|jpeg|gif|svg|pdf|zip|tar|gz)$/i)) {
+        if (rawUrl.pathname.match(/\.(png|jpg|jpeg|gif|svg|pdf|zip|tar|gz)$/i)) {
           continue
         }
 
+        // Normalize URL (removes hash, search, trailing slashes)
+        const url = normalizePageUrl(rawUrl.toString())
         links.add(url.toString())
       } catch {
         // Invalid URL, skip

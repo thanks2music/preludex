@@ -1,12 +1,16 @@
 import { docPatterns } from './config/patterns.js'
 
 /**
- * Normalize a URL by removing hash and search params
+ * Normalize a URL by removing hash, search params, and trailing slashes
  */
 export function normalizePageUrl(input: string): URL {
   const url = new URL(input)
   url.hash = ''
   url.search = ''
+  // Normalize trailing slash (remove unless it's root path)
+  if (url.pathname.length > 1 && url.pathname.endsWith('/')) {
+    url.pathname = url.pathname.slice(0, -1)
+  }
   return url
 }
 
