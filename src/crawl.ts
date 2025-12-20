@@ -4,6 +4,15 @@ import { extractDocLinks } from './md.js'
 import { saveFile } from './fs.js'
 import { fetchWithFallback, closeBrowser, type CrawlOptions } from './adapters/index.js'
 import { parseSitemap, findSitemapUrl, filterByBasePath } from './sitemap.js'
+import { BlockedContentError } from './errors.js'
+
+/**
+ * Statistics for blocked pages
+ */
+interface BlockedPage {
+  url: string
+  reason: string
+}
 
 /**
  * Crawl a documentation site and save as markdown files
@@ -12,6 +21,7 @@ export async function crawl(entry: string, options: CrawlOptions): Promise<void>
   const entryUrl = normalizePageUrl(entry)
   const visited = new Set<string>()
   const failed: string[] = []
+  const blocked: BlockedPage[] = []
 
   // Concurrency limiter
   const limit = pLimit(options.concurrency || 3)
@@ -26,16 +36,25 @@ export async function crawl(entry: string, options: CrawlOptions): Promise<void>
   try {
     // Sitemap mode
     if (options.useSitemap) {
-      await crawlWithSitemap(entryUrl, options, limit, visited, failed)
+      await crawlWithSitemap(entryUrl, options, limit, visited, failed, blocked)
     } else {
       // Link crawl mode (default)
-      await crawlWithLinks(entryUrl, options, limit, visited, failed)
+      await crawlWithLinks(entryUrl, options, limit, visited, failed, blocked)
     }
 
     // Summary
     console.log('')
     console.log('='.repeat(50))
     console.log(`Done! Saved ${visited.size} pages to ${options.outDir}`)
+
+    if (blocked.length > 0) {
+      console.log(`Blocked: ${blocked.length} pages (bot protection detected)`)
+      if (options.verbose) {
+        blocked.forEach((b) => console.log(`  - ${b.url} (${b.reason})`))
+      }
+      console.log('Tip: Try --use-jina for sites with bot protection')
+    }
+
     if (failed.length > 0) {
       console.log(`Failed: ${failed.length} pages`)
       if (options.verbose) {
@@ -56,7 +75,8 @@ async function crawlWithSitemap(
   options: CrawlOptions,
   limit: ReturnType<typeof pLimit>,
   visited: Set<string>,
-  failed: string[]
+  failed: string[],
+  blocked: BlockedPage[]
 ): Promise<void> {
   console.log('Using sitemap.xml for URL discovery')
   console.log('')
@@ -97,9 +117,14 @@ async function crawlWithSitemap(
             await saveFile(path, result.content)
             console.log(`[${result.adapter}] Saved: ${path}`)
           } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error)
-            console.warn(`Failed: ${url} - ${msg}`)
-            failed.push(urlStr)
+            if (error instanceof BlockedContentError) {
+              blocked.push({ url: urlStr, reason: error.reason })
+              console.warn(`  [blocked] ${url.hostname} - ${error.reason}`)
+            } else {
+              const msg = error instanceof Error ? error.message : String(error)
+              console.warn(`Failed: ${url} - ${msg}`)
+              failed.push(urlStr)
+            }
           }
         })
       )
@@ -115,7 +140,8 @@ async function crawlWithLinks(
   options: CrawlOptions,
   limit: ReturnType<typeof pLimit>,
   visited: Set<string>,
-  failed: string[]
+  failed: string[],
+  blocked: BlockedPage[]
 ): Promise<void> {
   console.log('')
 
@@ -167,9 +193,14 @@ async function crawlWithLinks(
               }
             }
           } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error)
-            console.warn(`Failed: ${url} - ${msg}`)
-            failed.push(url.toString())
+            if (error instanceof BlockedContentError) {
+              blocked.push({ url: url.toString(), reason: error.reason })
+              console.warn(`  [blocked] ${url.hostname} - ${error.reason}`)
+            } else {
+              const msg = error instanceof Error ? error.message : String(error)
+              console.warn(`Failed: ${url} - ${msg}`)
+              failed.push(url.toString())
+            }
           }
         })
       )

@@ -9,6 +9,7 @@ import {
   defaultSiteConfig,
   type SiteConfig,
 } from '../config/sites.js'
+import { BlockedContentError, type BlockedReason } from '../errors.js'
 
 // Initialize turndown with GFM support
 const turndown = new TurndownService({
@@ -112,6 +113,74 @@ async function extractContent(page: Page, config: SiteConfig): Promise<string> {
 }
 
 /**
+ * Patterns that indicate blocked or incomplete content
+ */
+const BLOCKED_CONTENT_PATTERNS = [
+  /^Waiting for .+ to respond\.{0,3}$/i,
+  /^Just a moment\.{0,3}$/i,
+  /^Checking your browser\.{0,3}$/i,
+  /^Please wait while we verify/i,
+  /^Enable JavaScript and cookies to continue/i,
+  /^Access denied/i,
+  /^403 Forbidden/i,
+  /^Attention Required!/i,
+  /^Please complete the security check/i,
+]
+
+/**
+ * Validate that extracted content is meaningful
+ * @throws BlockedContentError if content appears to be blocked or empty
+ */
+function validateContent(markdown: string, url: URL): void {
+  const trimmed = markdown.trim()
+
+  // Check for empty content
+  if (!trimmed) {
+    throw new BlockedContentError(url, 'empty', `Empty content extracted from ${url.hostname}`)
+  }
+
+  // Check for Cloudflare challenge patterns anywhere in content
+  if (
+    trimmed.includes('cf-browser-verification') ||
+    trimmed.includes('cf_chl_opt') ||
+    trimmed.includes('Cloudflare Ray ID')
+  ) {
+    throw new BlockedContentError(
+      url,
+      'cloudflare',
+      `Cloudflare protection detected on ${url.hostname}`
+    )
+  }
+
+  // Check for access denied patterns
+  if (
+    trimmed.includes('Access Denied') ||
+    trimmed.includes('403 Forbidden') ||
+    trimmed.includes('401 Unauthorized')
+  ) {
+    throw new BlockedContentError(
+      url,
+      'access-denied',
+      `Access denied on ${url.hostname}`
+    )
+  }
+
+  // Check for suspiciously short content (less than 100 chars)
+  if (trimmed.length < 100) {
+    // Check if it matches known blocked patterns
+    for (const pattern of BLOCKED_CONTENT_PATTERNS) {
+      if (pattern.test(trimmed)) {
+        throw new BlockedContentError(
+          url,
+          'bot-detection',
+          `Content blocked by ${url.hostname} (bot detection)`
+        )
+      }
+    }
+  }
+}
+
+/**
  * Clean common footer patterns from markdown
  */
 function cleanFooterPatterns(markdown: string): string {
@@ -201,9 +270,14 @@ export const playwrightAdapter: SiteAdapter = {
       let config = getSiteConfig(url)
       const isDefaultConfig = config === defaultSiteConfig
 
-      // Navigate to page with domcontentloaded (faster than networkidle)
+      // Warn about sites that may block headless browsers
+      if (config.mayRequireJina) {
+        console.warn(`  [warning] ${url.hostname} may block headless browsers. If fetch fails, try --use-jina`)
+      }
+
+      // Navigate to page
       await page.goto(url.toString(), {
-        waitUntil: 'domcontentloaded',
+        waitUntil: config.waitUntil || 'domcontentloaded',
         timeout: 30000,
       })
 
@@ -238,6 +312,9 @@ export const playwrightAdapter: SiteAdapter = {
 
       // Clean common footer patterns
       const cleanedMarkdown = cleanFooterPatterns(markdown)
+
+      // Validate content is meaningful (not blocked/empty)
+      validateContent(cleanedMarkdown, url)
 
       return cleanedMarkdown
     } finally {
