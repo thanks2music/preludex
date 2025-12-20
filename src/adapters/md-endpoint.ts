@@ -23,12 +23,37 @@ async function fetchMdEndpoint(url: URL): Promise<string> {
     throw new Error(`Fetch failed: ${res.status} ${mdUrl}`)
   }
 
-  const text = await res.text()
+  // Validate Content-Type header
+  const contentType = res.headers.get('content-type') || ''
+  if (contentType.includes('application/json')) {
+    throw new Error('Received JSON instead of Markdown')
+  }
+  if (contentType.includes('text/html') && !contentType.includes('text/markdown')) {
+    throw new Error('Received HTML instead of Markdown (Content-Type)')
+  }
 
-  // Validate response is markdown, not HTML
-  const trimmed = text.trim().toLowerCase()
-  if (trimmed.startsWith('<!doctype') || trimmed.startsWith('<html')) {
+  const text = await res.text()
+  const trimmed = text.trim()
+  const trimmedLower = trimmed.toLowerCase()
+
+  // Validate response is not HTML
+  if (
+    trimmedLower.startsWith('<!doctype') ||
+    trimmedLower.startsWith('<html') ||
+    trimmedLower.startsWith('<head') ||
+    trimmedLower.startsWith('<body')
+  ) {
     throw new Error('Received HTML instead of Markdown')
+  }
+
+  // Validate response is not JSON
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    throw new Error('Received JSON instead of Markdown')
+  }
+
+  // Check for empty or too short content
+  if (trimmed.length < 10) {
+    throw new Error('Response too short to be valid Markdown')
   }
 
   return text

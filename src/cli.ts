@@ -97,7 +97,7 @@ Options:
   --concurrency, -c <n> Parallel requests (default: 3)
   --use-jina            Use Jina Reader API (external, opt-in)
   --use-sitemap         Use sitemap.xml for URL discovery
-  --use-md-endpoint     Use .md endpoint for supported sites (e.g., Claude Docs)
+  --use-md-endpoint     Use .md endpoint (auto-enabled for Claude/OpenAI Codex docs)
   --numbered            Add numbered prefixes to filenames (e.g., 01-index.md)
   --verbose             Show detailed output
   --help, -h            Show this help
