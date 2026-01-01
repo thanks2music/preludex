@@ -178,3 +178,45 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 - Repository: https://github.com/thanks2music/preludex
 - Issues: https://github.com/thanks2music/preludex/issues
+
+## Development
+
+### Setup
+
+```bash
+# Install dependencies
+bun install
+
+# Build
+bun run build
+
+# Run in development mode
+bun src/cli.ts <url> [options]
+```
+
+### Release Workflow
+
+This project uses GitHub Actions with [npm Trusted Publisher](https://docs.npmjs.com/generating-provenance-statements) (OIDC) for automated releases.
+
+```bash
+# 1. Commit your changes on a feature branch
+git add .
+git commit -m "your commit message"
+
+# 2. Push to remote and create a PR
+git push origin <branch-name>
+gh pr create --title "your PR title"
+
+# 3. After PR is merged, update local main
+git checkout main
+git pull origin main
+
+# 4. Bump version + create tag + push
+npm version patch  # or minor/major
+git push origin main --tags
+```
+
+GitHub Actions will automatically:
+- Build the project
+- Publish to npm
+- Create a GitHub Release with auto-generated release notes
