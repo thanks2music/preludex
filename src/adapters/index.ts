@@ -3,26 +3,30 @@ export { mdxAdapter } from './mdx.js'
 export { mdEndpointAdapter } from './md-endpoint.js'
 export { playwrightAdapter, closeBrowser } from './playwright.js'
 export { jinaAdapter } from './jina.js'
+export { githubAdapter, fetchRawMarkdown, listGitHubMarkdownFiles } from './github.js'
 
 import type { SiteAdapter, CrawlOptions } from './types.js'
 import { mdxAdapter } from './mdx.js'
 import { mdEndpointAdapter, supportsMdEndpoint } from './md-endpoint.js'
 import { playwrightAdapter } from './playwright.js'
 import { jinaAdapter } from './jina.js'
+import { githubAdapter } from './github.js'
 
 /**
  * Fetch markdown content with fallback strategy
  *
  * Default mode (local-only):
- * 1. MD endpoint adapter (if supported or --use-md-endpoint)
- * 2. Site-specific adapter (MDX for Claude/Vercel)
- * 3. Playwright + turndown
+ * 1. GitHub adapter (for GitHub repositories)
+ * 2. MD endpoint adapter (if supported or --use-md-endpoint)
+ * 3. Site-specific adapter (MDX for Claude/Vercel)
+ * 4. Playwright + turndown
  *
  * --use-jina mode:
- * 1. MD endpoint adapter (if supported or --use-md-endpoint)
- * 2. Site-specific adapter
- * 3. Jina Reader API
- * 4. Playwright (fallback)
+ * 1. GitHub adapter
+ * 2. MD endpoint adapter (if supported or --use-md-endpoint)
+ * 3. Site-specific adapter
+ * 4. Jina Reader API
+ * 5. Playwright (fallback)
  */
 export async function fetchWithFallback(
   url: URL,
@@ -30,7 +34,23 @@ export async function fetchWithFallback(
 ): Promise<{ content: string; adapter: string }> {
   const errors: Array<{ adapter: string; error: Error }> = []
 
-  // 1. Try MD endpoint adapter (if enabled or auto-detected)
+  // 1. Try GitHub adapter (highest priority for GitHub URLs)
+  if (githubAdapter.match(url)) {
+    try {
+      if (options.verbose) {
+        console.log(`Trying adapter: ${githubAdapter.name}`)
+      }
+      const content = await githubAdapter.fetchMarkdown(url)
+      return { content, adapter: githubAdapter.name }
+    } catch (error) {
+      errors.push({ adapter: githubAdapter.name, error: error as Error })
+      if (options.verbose) {
+        console.warn(`${githubAdapter.name} failed:`, (error as Error).message)
+      }
+    }
+  }
+
+  // 2. Try MD endpoint adapter (if enabled or auto-detected)
   const shouldTryMdEndpoint = options.useMdEndpoint || supportsMdEndpoint(url.hostname)
   if (shouldTryMdEndpoint) {
     try {
@@ -47,7 +67,7 @@ export async function fetchWithFallback(
     }
   }
 
-  // 2. Try site-specific adapter (MDX)
+  // 3. Try site-specific adapter (MDX)
   if (mdxAdapter.match(url)) {
     try {
       if (options.verbose) {
@@ -63,7 +83,7 @@ export async function fetchWithFallback(
     }
   }
 
-  // 3. Try Jina Reader if enabled (opt-in)
+  // 4. Try Jina Reader if enabled (opt-in)
   if (options.useJina) {
     try {
       if (options.verbose) {
@@ -80,7 +100,7 @@ export async function fetchWithFallback(
     }
   }
 
-  // 4. Playwright adapter (default/fallback)
+  // 5. Playwright adapter (default/fallback)
   try {
     if (options.verbose) {
       console.log(`Trying adapter: ${playwrightAdapter.name}`)
@@ -102,6 +122,11 @@ export async function fetchWithFallback(
  * Get the appropriate adapter for a URL based on options
  */
 export function getAdapter(url: URL, options: CrawlOptions): SiteAdapter {
+  // GitHub repositories always use GitHub adapter
+  if (githubAdapter.match(url)) {
+    return githubAdapter
+  }
+
   // MD endpoint if enabled or auto-detected
   if (options.useMdEndpoint || supportsMdEndpoint(url.hostname)) {
     return mdEndpointAdapter

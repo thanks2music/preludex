@@ -6,12 +6,22 @@ import {
   detectBasePath,
   getDirectoryPath,
   addNumberedPrefix,
+  isGitHubUrl,
 } from './url.js'
 import { extractDocLinks } from './md.js'
 import { saveFile } from './fs.js'
-import { fetchWithFallback, closeBrowser, type CrawlOptions } from './adapters/index.js'
+import {
+  fetchWithFallback,
+  closeBrowser,
+  listGitHubMarkdownFiles,
+  fetchRawMarkdown,
+  type CrawlOptions,
+} from './adapters/index.js'
 import { parseSitemap, findSitemapUrl, filterByBasePath } from './sitemap.js'
 import { BlockedContentError } from './errors.js'
+import { validateFilePath } from './utils/path.js'
+import { ProgressTracker } from './utils/progress.js'
+import { logger } from './utils/logger.js'
 
 /**
  * Statistics for blocked pages
@@ -43,6 +53,13 @@ class NumberedCounter {
  */
 export async function crawl(entry: string, options: CrawlOptions): Promise<void> {
   const entryUrl = normalizePageUrl(entry)
+
+  // GitHub repository special handling
+  if (isGitHubUrl(entryUrl)) {
+    await crawlGitHubRepo(entryUrl, options)
+    return
+  }
+
   const visited = new Set<string>()
   const failed: string[] = []
   const blocked: BlockedPage[] = []
@@ -53,11 +70,11 @@ export async function crawl(entry: string, options: CrawlOptions): Promise<void>
   // Concurrency limiter
   const limit = pLimit(options.concurrency || 3)
 
-  console.log(`Starting crawl: ${entryUrl}`)
+  logger.log(`Starting crawl: ${entryUrl}`)
   if (options.useJina) {
-    console.log('Using Jina Reader API (external)')
+    logger.log('Using Jina Reader API (external)')
   } else {
-    console.log('Using Playwright (local)')
+    logger.log('Using Playwright (local)')
   }
 
   try {
@@ -70,22 +87,22 @@ export async function crawl(entry: string, options: CrawlOptions): Promise<void>
     }
 
     // Summary
-    console.log('')
-    console.log('='.repeat(50))
-    console.log(`Done! Saved ${visited.size} pages to ${options.outDir}`)
+    logger.log('')
+    logger.log('='.repeat(50))
+    logger.log(`Done! Saved ${visited.size} pages to ${options.outDir}`)
 
     if (blocked.length > 0) {
-      console.log(`Blocked: ${blocked.length} pages (bot protection detected)`)
+      logger.log(`Blocked: ${blocked.length} pages (bot protection detected)`)
       if (options.verbose) {
-        blocked.forEach((b) => console.log(`  - ${b.url} (${b.reason})`))
+        blocked.forEach((b) => logger.log(`  - ${b.url} (${b.reason})`))
       }
-      console.log('Tip: Try --use-jina for sites with bot protection')
+      logger.log('Tip: Try --use-jina for sites with bot protection')
     }
 
     if (failed.length > 0) {
-      console.log(`Failed: ${failed.length} pages`)
+      logger.log(`Failed: ${failed.length} pages`)
       if (options.verbose) {
-        failed.forEach((url) => console.log(`  - ${url}`))
+        failed.forEach((url) => logger.log(`  - ${url}`))
       }
     }
   } finally {
@@ -106,27 +123,27 @@ async function crawlWithSitemap(
   blocked: BlockedPage[],
   counter: NumberedCounter | null
 ): Promise<void> {
-  console.log('Using sitemap.xml for URL discovery')
-  console.log('')
+  logger.log('Using sitemap.xml for URL discovery')
+  logger.log('')
 
   // Find sitemap URL
   const sitemapUrl = await findSitemapUrl(entryUrl)
   if (!sitemapUrl) {
     throw new Error(`No sitemap found for ${entryUrl.origin}`)
   }
-  console.log(`Found sitemap: ${sitemapUrl}`)
+  logger.log(`Found sitemap: ${sitemapUrl}`)
 
   // Parse sitemap
   let urls = await parseSitemap(sitemapUrl)
-  console.log(`Sitemap contains ${urls.length} URLs`)
+  logger.log(`Sitemap contains ${urls.length} URLs`)
 
   // Filter by base path (e.g., /docs/)
   const basePath = detectBasePath(entryUrl)
   if (basePath) {
     urls = filterByBasePath(urls, basePath)
-    console.log(`Filtered to ${urls.length} URLs matching ${basePath}`)
+    logger.log(`Filtered to ${urls.length} URLs matching ${basePath}`)
   }
-  console.log('')
+  logger.log('')
 
   // Crawl all URLs from sitemap
   const batches = chunkArray(urls, options.concurrency || 3)
@@ -152,14 +169,14 @@ async function crawlWithSitemap(
 
             const path = `${options.outDir}/${localPath}`
             await saveFile(path, result.content)
-            console.log(`[${result.adapter}] Saved: ${path}`)
+            logger.log(`[${result.adapter}] Saved: ${path}`)
           } catch (error) {
             if (error instanceof BlockedContentError) {
               blocked.push({ url: url.toString(), reason: error.reason })
-              console.warn(`  [blocked] ${url.hostname} - ${error.reason}`)
+              logger.warn(`  [blocked] ${url.hostname} - ${error.reason}`)
             } else {
               const msg = error instanceof Error ? error.message : String(error)
-              console.warn(`Failed: ${url} - ${msg}`)
+              logger.warn(`Failed: ${url} - ${msg}`)
               failed.push(url.toString())
             }
           }
@@ -181,7 +198,7 @@ async function crawlWithLinks(
   blocked: BlockedPage[],
   counter: NumberedCounter | null
 ): Promise<void> {
-  console.log('')
+  logger.log('')
 
   // Fetch entry page
   const { content, adapter } = await fetchWithFallback(entryUrl, options)
@@ -198,11 +215,11 @@ async function crawlWithLinks(
 
   const localPath = `${options.outDir}/${entryLocalPath}`
   await saveFile(localPath, content)
-  console.log(`[${adapter}] Saved: ${localPath}`)
+  logger.log(`[${adapter}] Saved: ${localPath}`)
 
   // Extract links
   const links = extractDocLinks(content, entryUrl)
-  console.log(`Found ${links.length} links\n`)
+  logger.log(`Found ${links.length} links\n`)
 
   // BFS crawl with depth limit
   const maxDepth = options.depth ?? 1
@@ -245,7 +262,7 @@ async function crawlWithLinks(
 
             const path = `${options.outDir}/${pagePath}`
             await saveFile(path, result.content)
-            console.log(`[${result.adapter}] Saved: ${path}`)
+            logger.log(`[${result.adapter}] Saved: ${path}`)
 
             // Add new links if within depth limit
             if (depth < maxDepth) {
@@ -262,16 +279,91 @@ async function crawlWithLinks(
           } catch (error) {
             if (error instanceof BlockedContentError) {
               blocked.push({ url: url.toString(), reason: error.reason })
-              console.warn(`  [blocked] ${url.hostname} - ${error.reason}`)
+              logger.warn(`  [blocked] ${url.hostname} - ${error.reason}`)
             } else {
               const msg = error instanceof Error ? error.message : String(error)
-              console.warn(`Failed: ${url} - ${msg}`)
+              logger.warn(`Failed: ${url} - ${msg}`)
               failed.push(url.toString())
             }
           }
         })
       )
     )
+  }
+}
+
+/**
+ * Crawl GitHub repository
+ * NOTE: raw URLを直接取得する（fetchWithFallbackは使用しない）
+ */
+async function crawlGitHubRepo(
+  entryUrl: URL,
+  options: CrawlOptions
+): Promise<void> {
+  logger.log(`Detected GitHub repository: ${entryUrl}`)
+  logger.log('Using GitHub adapter for direct markdown access')
+  logger.log('')
+
+  const visited = new Set<string>()
+  const failed: string[] = []
+  const limit = pLimit(options.concurrency || 3)
+
+  try {
+    // List all markdown files in the repository
+    const files = await listGitHubMarkdownFiles(entryUrl)
+    logger.log(`Found ${files.length} markdown files`)
+    logger.log('')
+
+    // Create progress tracker
+    const progress = new ProgressTracker(files.length)
+
+    // Download all files in parallel
+    const batches = chunkArray(files, options.concurrency || 3)
+
+    for (const batch of batches) {
+      await Promise.all(
+        batch.map((file) =>
+          limit(async () => {
+            if (visited.has(file.path)) return
+            visited.add(file.path)
+
+            try {
+              // Fetch markdown content directly from raw URL
+              const content = await fetchRawMarkdown(file.rawUrl)
+
+              // Validate and save to disk (preserve repository structure)
+              const safePath = validateFilePath(file.path, options.outDir)
+              await saveFile(safePath, content)
+
+              if (options.verbose) {
+                logger.log(`[github] Saved: ${safePath}`)
+              }
+
+              // Update progress
+              progress.increment()
+            } catch (error) {
+              const msg = error instanceof Error ? error.message : String(error)
+              logger.warn(`Failed: ${file.path} - ${msg}`)
+              failed.push(file.path)
+            }
+          })
+        )
+      )
+    }
+
+    // Summary
+    logger.log('')
+    logger.log('='.repeat(50))
+    logger.log(`Done! Saved ${visited.size} files to ${options.outDir}`)
+    if (failed.length > 0) {
+      logger.log(`Failed: ${failed.length} files`)
+      if (options.verbose) {
+        failed.forEach((path) => logger.log(`  - ${path}`))
+      }
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    throw new Error(`GitHub crawl failed: ${msg}`)
   }
 }
 

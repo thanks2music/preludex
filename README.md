@@ -1,119 +1,129 @@
 # preludex
 
-[![npm version](https://img.shields.io/npm/v/preludex.svg)](https://www.npmjs.com/package/preludex)
+ドキュメントサイトをクリーンな Markdown ファイルとしてダウンロードする CLI ツール。
+オフライン閲覧、LLM/AI ナレッジベース構築、ローカル検索に最適です。
 
-A CLI tool for downloading documentation sites as clean Markdown files. Perfect for offline reading, LLM/AI knowledge bases, and local search.
+> **Note**: これは開発環境です。公開版は以下を参照してください。
+> - **npm**: https://www.npmjs.com/package/preludex
+> - **GitHub**: https://github.com/thanks2music/preludex
 
-## Features
+## 特徴
 
-- **Framework Auto-Detection** - Automatically detects and optimizes for popular documentation frameworks
-- **Clean Markdown Output** - Converts HTML to well-formatted Markdown with proper heading structure
-- **Link Crawling** - Follows internal links with configurable depth control
-- **Sitemap Support** - Bulk download using sitemap.xml
-- **Multiple Adapters** - Playwright (default), MD Endpoint, Jina Reader API, and direct MDX fetching
-- **Parallel Processing** - Configurable concurrency for faster downloads
-- **Numbered Output** - Optional sequential prefixes for ordered file naming (e.g., `01-intro.md`, `02-setup.md`)
+- **フレームワーク自動検出** - 主要なドキュメントフレームワークを自動検出し最適化
+- **GitHub リポジトリ対応** - GitHub リポジトリから README と docs/ ディレクトリの Markdown を直接ダウンロード
+- **クリーンな Markdown 出力** - HTML を整形された Markdown に変換
+- **リンククローリング** - 内部リンクを辿り、深度制御可能
+- **サイトマップ対応** - sitemap.xml を使用した一括ダウンロード
+- **複数アダプター** - GitHub、Playwright（デフォルト）、Jina Reader API、MDX 直接取得
+- **並列処理** - 設定可能な同時実行数で高速ダウンロード
+- **エラーリトライ** - 一時的な障害に対する自動リトライとエクスポネンシャルバックオフ
+- **レート制限対応** - GitHub API レート制限の自動監視と待機
+- **進捗表示** - リアルタイム進捗表示と ETA 計算
 
-## Supported Frameworks
+## 対応フレームワーク
 
-preludex automatically detects and applies optimized settings for:
+preludex は以下のフレームワークを自動検出し、最適な設定を適用します:
 
-| Framework | Examples |
-|-----------|----------|
+| フレームワーク | 使用例 |
+|---------------|--------|
+| **GitHub Repositories** | Next.js, Fastify, Deno（README + docs/）|
 | **Docusaurus** | React Native, Jest, Babel |
 | **VitePress** | Hono, Vue.js, Vite |
 | **MkDocs** | Material for MkDocs |
 | **Starlight** | Astro, Cloudflare Docs |
 | **Sphinx** | Python, pip, Read the Docs |
-| **GitBook** | Various hosted docs |
+| **GitBook** | 各種ホスティングドキュメント |
 
-## Installation
+## インストール
 
 ```bash
 # npm
 npm install -g preludex
 
-# Or run directly with npx/bunx
+# npx/bunx で直接実行
 npx preludex <url>
 bunx preludex <url>
 ```
 
-**Note:** Playwright requires browser binaries. Install them with:
+**注意:** Playwright はブラウザバイナリが必要です:
 
 ```bash
 npx playwright install chromium
-# or
+# または
 bunx playwright install chromium
 ```
 
-## Usage
+## 使用方法
 
-### Basic Usage
+### 基本的な使い方
 
 ```bash
-# Download a documentation page and its linked pages
+# ドキュメントページとリンク先をダウンロード
 preludex https://hono.dev/docs --out docs/hono
 
-# Crawl deeper (follow links up to 3 levels)
+# より深くクロール（3階層まで）
 preludex https://example.com/docs --depth 3 --out docs/example
 ```
 
-### Using Sitemap
+### GitHub リポジトリから Markdown をダウンロード
 
 ```bash
-# Download all pages listed in sitemap.xml
+# リポジトリ全体の Markdown ファイルをダウンロード
+preludex https://github.com/fastify/fastify --out docs/fastify
+
+# 特定のブランチを指定
+preludex https://github.com/facebook/react/tree/main --out docs/react
+
+# 特定のディレクトリのみ（blob URL も対応）
+preludex https://github.com/denoland/deno/tree/main/docs --out docs/deno
+
+# レート制限を回避（推奨）
+GITHUB_TOKEN=ghp_xxx preludex https://github.com/vercel/next.js --out docs/nextjs
+```
+
+**GitHub 対応の特徴:**
+- README.md と docs/ ディレクトリ内の全 Markdown ファイルを自動検出
+- GitHub Trees API による高速ファイル一覧取得（100,000ファイルまで対応）
+- デフォルトブランチの自動検出
+- スラッシュを含むブランチ名に対応（例: `feature/new-feature`）
+- 進捗表示とレート制限監視
+- 未認証: 60リクエスト/時、認証済み: 5,000リクエスト/時
+
+### サイトマップを使用
+
+```bash
+# sitemap.xml に記載された全ページをダウンロード
 preludex https://example.com/docs --use-sitemap --out docs/example
 ```
 
-### Using MD Endpoint
+### Jina Reader API を使用
 
 ```bash
-# Automatically uses MD endpoint for supported sites (Stainless-powered docs)
-preludex https://docs.anthropic.com/en/docs --out docs/anthropic
-
-# Force MD endpoint for other compatible sites
-preludex https://example.com/docs --use-md-endpoint --out docs/example
-```
-
-### Numbered Output
-
-```bash
-# Add sequential prefixes to filenames (useful for ordered documentation)
-preludex https://example.com/docs --numbered --out docs/example
-
-# Output: 01-getting-started.md, 02-installation.md, 03-configuration.md, ...
-```
-
-### Using Jina Reader API
-
-```bash
-# Use Jina Reader API (requires JINA_API_KEY environment variable for higher limits)
+# Jina Reader API を使用（高レート制限には JINA_API_KEY 環境変数が必要）
 preludex https://example.com/docs --use-jina --out docs/example
 ```
 
-## Options
+## オプション
 
-| Option | Alias | Default | Description |
-|--------|-------|---------|-------------|
-| `--out` | `-o` | `docs` | Output directory |
-| `--depth` | `-d` | `1` | Maximum crawl depth (0 = entry page only) |
-| `--concurrency` | `-c` | `3` | Number of parallel requests |
-| `--use-sitemap` | | `false` | Use sitemap.xml for URL discovery |
-| `--use-jina` | | `false` | Use Jina Reader API instead of Playwright |
-| `--use-md-endpoint` | | `false` | Fetch .md files directly (auto-enabled for supported sites) |
-| `--numbered` | | `false` | Add numbered prefixes to filenames (e.g., `01-index.md`) |
-| `--verbose` | | `false` | Show detailed output |
-| `--help` | `-h` | | Show help |
-| `--version` | `-v` | | Show version |
+| オプション | 短縮形 | デフォルト | 説明 |
+|-----------|--------|-----------|------|
+| `--out` | `-o` | `docs` | 出力ディレクトリ |
+| `--depth` | `-d` | `1` | 最大クロール深度（0 = エントリページのみ） |
+| `--concurrency` | `-c` | `3` | 並列リクエスト数 |
+| `--use-sitemap` | | `false` | sitemap.xml を使用して URL を発見 |
+| `--use-jina` | | `false` | Playwright の代わりに Jina Reader API を使用 |
+| `--verbose` | | `false` | 詳細出力を表示 |
+| `--help` | `-h` | | ヘルプを表示 |
+| `--version` | `-v` | | バージョンを表示 |
 
-## Output Structure
+## 出力構造
 
-preludex preserves the documentation structure in the output directory:
+preludex はドキュメントの構造を出力ディレクトリに保持します:
 
 ```
-Input URL: https://example.com/docs/guide/getting-started
+入力 URL: https://example.com/docs/guide/getting-started
 
-Output:
+出力:
 docs/
 ├── getting-started.md
 ├── api/
@@ -123,100 +133,100 @@ docs/
     └── advanced.md
 ```
 
-## How It Works
+## 動作の仕組み
 
-1. **Fetch** - Downloads the page using Playwright (headless browser) or Jina Reader API
-2. **Detect** - Identifies the documentation framework and applies optimized selectors
-3. **Extract** - Removes navigation, sidebars, and other non-content elements
-4. **Convert** - Transforms HTML to clean Markdown using Turndown
-5. **Crawl** - Extracts internal links and queues them for processing (BFS)
-6. **Save** - Writes Markdown files preserving the URL structure
+1. **Fetch** - Playwright（ヘッドレスブラウザ）または Jina Reader API でページを取得
+2. **Detect** - ドキュメントフレームワークを識別し、最適なセレクタを適用
+3. **Extract** - ナビゲーション、サイドバーなどの非コンテンツ要素を除去
+4. **Convert** - Turndown を使用して HTML をクリーンな Markdown に変換
+5. **Crawl** - 内部リンクを抽出し、処理キューに追加（BFS）
+6. **Save** - URL 構造を保持した Markdown ファイルを保存
 
-## Use Cases
+## ユースケース
 
-- **Offline Documentation** - Read docs without internet access
-- **LLM Knowledge Base** - Feed documentation to AI assistants (Claude, GPT, etc.)
-- **Local Search** - Use ripgrep, grep, or IDE search across all docs
-- **Obsidian/Notion Import** - Build personal knowledge bases
-- **Archive** - Preserve documentation for reference
+- **オフラインドキュメント** - インターネット接続なしでドキュメントを閲覧
+- **LLM ナレッジベース** - AI アシスタント（Claude, GPT など）にドキュメントを提供
+- **ローカル検索** - ripgrep、grep、IDE 検索でドキュメント全体を検索
+- **Obsidian/Notion 連携** - 個人ナレッジベースの構築
+- **アーカイブ** - ドキュメントを参照用に保存
 
-## Adapters
+## アダプター
 
-preludex uses different adapters based on the target site:
+preludex は対象サイトに応じて異なるアダプターを使用します:
 
-| Adapter | Use Case | Method |
-|---------|----------|--------|
-| **MD Endpoint** | Stainless-powered docs | Direct .md file fetch |
-| **Playwright** | Most sites (default) | Headless browser rendering |
-| **MDX** | Claude Docs, Vercel, Next.js | Direct .md/.mdx file fetch |
-| **Jina** | Fallback / API-based | Jina Reader API |
+| アダプター | 用途 | 方式 | 優先度 |
+|-----------|------|------|--------|
+| **GitHub** | GitHub リポジトリ | GitHub API + Raw URL | 1 |
+| **MDX** | Claude Docs, Vercel, Next.js | .md/.mdx ファイルを直接取得 | 2 |
+| **Jina** | API ベース（`--use-jina` 使用時） | Jina Reader API | 3 |
+| **Playwright** | 多くのサイト（デフォルト） | ヘッドレスブラウザレンダリング | 4 |
 
-The adapter is automatically selected based on the target site:
+アダプターは URL パターンに基づいて自動選択されます。GitHub リポジトリ URL が検出された場合、GitHub アダプターが最優先で使用されます。
 
-- **MD Endpoint** is auto-enabled for: `docs.anthropic.com`, `docs.claude.com`, `code.claude.com`, `developers.openai.com`
-- Use `--use-md-endpoint` to force this adapter for other Stainless-powered documentation sites
-- Use `--use-jina` to use the Jina Reader API
+## 環境変数
 
-## Environment Variables
+| 変数 | 説明 | デフォルト |
+|------|------|-----------|
+| `GITHUB_TOKEN` | オプション。GitHub API のレート制限を 60/時 → 5,000/時 に引き上げ | なし |
+| `JINA_API_KEY` | オプション。Jina Reader API の高レート制限用キー | なし |
+| `PRELUDEX_LOG_LEVEL` | ログレベル（`debug`, `info`, `warn`, `error`） | `info` |
 
-| Variable | Description |
-|----------|-------------|
-| `JINA_API_KEY` | Optional. Jina Reader API key for higher rate limits |
+**GITHUB_TOKEN の取得方法:**
+1. GitHub Settings → Developer settings → Personal access tokens
+2. "Generate new token (classic)" を選択
+3. `public_repo` スコープを選択（公開リポジトリのみの場合）
+4. トークンを生成してコピー
+5. 環境変数に設定: `export GITHUB_TOKEN=ghp_your_token_here`
 
-## Requirements
+## 要件
 
-- Node.js >= 18.0.0 or Bun >= 1.0.0
-- Playwright Chromium (auto-installed on first run)
+- Node.js >= 18.0.0 または Bun >= 1.0.0
+- Playwright Chromium（初回実行時に自動インストール）
 
-## License
-
-MIT
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-- Repository: https://github.com/thanks2music/preludex
-- Issues: https://github.com/thanks2music/preludex/issues
-
-## Development
-
-### Setup
+## 開発
 
 ```bash
-# Install dependencies
+# 依存関係のインストール
 bun install
 
-# Build
+# 開発モードで実行
+bun run dev <url>
+
+# ビルド
 bun run build
-
-# Run in development mode
-bun src/cli.ts <url> [options]
 ```
 
-### Release Workflow
+## 更新履歴
 
-This project uses GitHub Actions with [npm Trusted Publisher](https://docs.npmjs.com/generating-provenance-statements) (OIDC) for automated releases.
+### Phase 2 - エラーハンドリング強化とレート制限対応 (2026-01-30)
 
-```bash
-# 1. Commit your changes on a feature branch
-git add .
-git commit -m "your commit message"
+**Phase 2.1 - 基本機能強化**
+- ✨ エクスポネンシャルバックオフによる自動リトライ機能
+- 📊 GitHub API レート制限の監視と自動待機
+- 🎯 リアルタイム進捗表示（完了率、速度、ETA）
 
-# 2. Push to remote and create a PR
-git push origin <branch-name>
-gh pr create --title "your PR title"
+**Phase 2.2 - エラー処理とロギング**
+- 🔍 GitHubError による詳細なエラー分類（permanent/temporary/rate-limit）
+- 📝 設定可能なログレベル（debug/info/warn/error）
+- 🛡️ ファイルサイズ制限（デフォルト10MB）によるメモリ保護
 
-# 3. After PR is merged, update local main
-git checkout main
-git pull origin main
+**Phase 2.3 - 最適化機能**
+- ⚡ GitHub API レスポンスキャッシュ（TTL: 1時間）
+- 🔄 中断されたダウンロードのレジューム機能（基盤実装）
+- 🎯 重複ファイル検出による効率化
 
-# 4. Bump version + create tag + push
-npm version patch  # or minor/major
-git push origin main --tags
-```
+**Phase 1 - GitHub リポジトリ対応 (2026-01-29)**
+- ✨ GitHub リポジトリからの Markdown 直接ダウンロード
+- 🌲 GitHub Trees API による高速ファイル一覧取得
+- 🔀 スラッシュを含むブランチ名対応（例: `feature/foo`）
+- 🔒 パストラバーサル攻撃防止
+- 📦 大規模リポジトリ対応（truncated tree 時の自動フォールバック）
 
-GitHub Actions will automatically:
-- Build the project
-- Publish to npm
-- Create a GitHub Release with auto-generated release notes
+**検証済みリポジトリ:**
+- [fastify/fastify](https://github.com/fastify/fastify) - 51 files
+- [denoland/deno](https://github.com/denoland/deno) - 97 files
+- [vercel/next.js](https://github.com/vercel/next.js) - 1,074 files
+
+## ライセンス
+
+MIT
