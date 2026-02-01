@@ -30,7 +30,13 @@
     "mkdocs",
     "sphinx",
     "gitbook",
-    "offline-docs"
+    "offline-docs",
+    "github",
+    "ai",
+    "llm",
+    "knowledge-base",
+    "offline",
+    "downloader"
   ],
   "author": "thanks2music <thanks2music@gmail.com>",
   "license": "MIT",
