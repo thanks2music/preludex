@@ -1,110 +1,118 @@
 # preludex
 
-[![npm version](https://img.shields.io/npm/v/preludex.svg)](https://www.npmjs.com/package/preludex)
+> Download documentation sites as clean Markdown files
 
-A CLI tool for downloading documentation sites as clean Markdown files. Perfect for offline reading, LLM/AI knowledge bases, and local search.
+[![npm version](https://badge.fury.io/js/preludex.svg)](https://www.npmjs.com/package/preludex)
+[![npm downloads](https://img.shields.io/npm/dm/preludex.svg)](https://www.npmjs.com/package/preludex)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A CLI tool for downloading documentation sites as Markdown files. Perfect for offline reading, LLM/AI knowledge bases, and local search.
 
 ## Features
 
-- **Framework Auto-Detection** - Automatically detects and optimizes for popular documentation frameworks
-- **Clean Markdown Output** - Converts HTML to well-formatted Markdown with proper heading structure
+- **Auto-detection** - Automatically detects and optimizes for major documentation frameworks
+- **GitHub Support** - Download Markdown files directly from GitHub repositories
+- **Clean Output** - Converts HTML to well-formatted Markdown
 - **Link Crawling** - Follows internal links with configurable depth control
 - **Sitemap Support** - Bulk download using sitemap.xml
-- **Multiple Adapters** - Playwright (default), MD Endpoint, Jina Reader API, and direct MDX fetching
-- **Parallel Processing** - Configurable concurrency for faster downloads
-- **Numbered Output** - Optional sequential prefixes for ordered file naming (e.g., `01-intro.md`, `02-setup.md`)
+- **Multiple Adapters** - GitHub, Playwright (default), Jina Reader API, MDX direct fetch
+- **Parallel Processing** - Configurable concurrency for fast downloads
+- **Progress Tracking** - Real-time progress with ETA calculation
+- **Rate Limiting** - Automatic GitHub API rate limit monitoring and handling
+
+## Installation
+
+```bash
+# Install globally
+npm install -g preludex
+
+# Or use directly with npx
+npx preludex <url>
+```
+
+**Note:** Playwright requires browser binaries:
+
+```bash
+npx playwright install chromium
+```
+
+## Quick Start
+
+```bash
+# Download documentation with linked pages
+preludex https://hono.dev/docs --out docs/hono
+
+# Download from GitHub repository
+preludex https://github.com/fastify/fastify --out docs/fastify
+
+# Crawl deeper (3 levels)
+preludex https://example.com/docs --depth 3 --out docs/example
+
+# Use sitemap for bulk download
+preludex https://example.com/docs --use-sitemap --out docs/example
+```
 
 ## Supported Frameworks
 
-preludex automatically detects and applies optimized settings for:
+preludex automatically detects and applies optimal settings for:
 
 | Framework | Examples |
 |-----------|----------|
+| **GitHub Repositories** | Next.js, Fastify, Deno (README + docs/) |
 | **Docusaurus** | React Native, Jest, Babel |
 | **VitePress** | Hono, Vue.js, Vite |
 | **MkDocs** | Material for MkDocs |
 | **Starlight** | Astro, Cloudflare Docs |
 | **Sphinx** | Python, pip, Read the Docs |
-| **GitBook** | Various hosted docs |
+| **GitBook** | Various hosted documentation |
 
-## Installation
+## GitHub Repository Downloads
 
-```bash
-# npm
-npm install -g preludex
-
-# Or run directly with npx/bunx
-npx preludex <url>
-bunx preludex <url>
-```
-
-**Note:** Playwright requires browser binaries. Install them with:
+Download Markdown files directly from GitHub repositories:
 
 ```bash
-npx playwright install chromium
-# or
-bunx playwright install chromium
+# Download all Markdown files from a repository
+preludex https://github.com/fastify/fastify --out docs/fastify
+
+# Specify a branch
+preludex https://github.com/facebook/react/tree/main --out docs/react
+
+# Download from a specific directory
+preludex https://github.com/denoland/deno/tree/main/docs --out docs/deno
+
+# With authentication (recommended to avoid rate limits)
+GITHUB_TOKEN=ghp_xxx preludex https://github.com/vercel/next.js --out docs/nextjs
 ```
 
-## Usage
+**GitHub Features:**
+- Automatically detects README.md and all Markdown files in docs/ directory
+- Fast file listing via GitHub Trees API (handles up to 100,000 files)
+- Auto-detects default branch
+- Supports branch names with slashes (e.g., `feature/new-feature`)
+- Progress tracking and rate limit monitoring
+- Rate limits: 60 requests/hour (unauthenticated), 5,000 requests/hour (authenticated)
 
-### Basic Usage
+## CLI Options
 
-```bash
-# Download a documentation page and its linked pages
-preludex https://hono.dev/docs --out docs/hono
-
-# Crawl deeper (follow links up to 3 levels)
-preludex https://example.com/docs --depth 3 --out docs/example
-```
-
-### Using Sitemap
-
-```bash
-# Download all pages listed in sitemap.xml
-preludex https://example.com/docs --use-sitemap --out docs/example
-```
-
-### Using MD Endpoint
-
-```bash
-# Automatically uses MD endpoint for supported sites (Stainless-powered docs)
-preludex https://docs.anthropic.com/en/docs --out docs/anthropic
-
-# Force MD endpoint for other compatible sites
-preludex https://example.com/docs --use-md-endpoint --out docs/example
-```
-
-### Numbered Output
-
-```bash
-# Add sequential prefixes to filenames (useful for ordered documentation)
-preludex https://example.com/docs --numbered --out docs/example
-
-# Output: 01-getting-started.md, 02-installation.md, 03-configuration.md, ...
-```
-
-### Using Jina Reader API
-
-```bash
-# Use Jina Reader API (requires JINA_API_KEY environment variable for higher limits)
-preludex https://example.com/docs --use-jina --out docs/example
-```
-
-## Options
-
-| Option | Alias | Default | Description |
+| Option | Short | Default | Description |
 |--------|-------|---------|-------------|
 | `--out` | `-o` | `docs` | Output directory |
 | `--depth` | `-d` | `1` | Maximum crawl depth (0 = entry page only) |
 | `--concurrency` | `-c` | `3` | Number of parallel requests |
 | `--use-sitemap` | | `false` | Use sitemap.xml for URL discovery |
 | `--use-jina` | | `false` | Use Jina Reader API instead of Playwright |
-| `--use-md-endpoint` | | `false` | Fetch .md files directly (auto-enabled for supported sites) |
-| `--numbered` | | `false` | Add numbered prefixes to filenames (e.g., `01-index.md`) |
 | `--verbose` | | `false` | Show detailed output |
 | `--help` | `-h` | | Show help |
 | `--version` | `-v` | | Show version |
+
+## How It Works
+
+1. **Fetch** - Retrieves pages using Playwright (headless browser) or Jina Reader API
+2. **Detect** - Identifies documentation framework and applies optimal selectors
+3. **Extract** - Removes non-content elements (navigation, sidebars, etc.)
+4. **Convert** - Converts HTML to clean Markdown using Turndown
+5. **Crawl** - Extracts internal links and adds to processing queue (BFS)
+6. **Save** - Saves Markdown files preserving URL structure
 
 ## Output Structure
 
@@ -123,100 +131,74 @@ docs/
     └── advanced.md
 ```
 
-## How It Works
-
-1. **Fetch** - Downloads the page using Playwright (headless browser) or Jina Reader API
-2. **Detect** - Identifies the documentation framework and applies optimized selectors
-3. **Extract** - Removes navigation, sidebars, and other non-content elements
-4. **Convert** - Transforms HTML to clean Markdown using Turndown
-5. **Crawl** - Extracts internal links and queues them for processing (BFS)
-6. **Save** - Writes Markdown files preserving the URL structure
-
 ## Use Cases
 
-- **Offline Documentation** - Read docs without internet access
+- **Offline Documentation** - Read docs without internet connection
 - **LLM Knowledge Base** - Feed documentation to AI assistants (Claude, GPT, etc.)
-- **Local Search** - Use ripgrep, grep, or IDE search across all docs
-- **Obsidian/Notion Import** - Build personal knowledge bases
-- **Archive** - Preserve documentation for reference
+- **Local Search** - Search entire documentation with ripgrep, grep, or IDE search
+- **Obsidian/Notion** - Build personal knowledge bases
+- **Archival** - Preserve documentation for reference
 
 ## Adapters
 
 preludex uses different adapters based on the target site:
 
-| Adapter | Use Case | Method |
-|---------|----------|--------|
-| **MD Endpoint** | Stainless-powered docs | Direct .md file fetch |
-| **Playwright** | Most sites (default) | Headless browser rendering |
-| **MDX** | Claude Docs, Vercel, Next.js | Direct .md/.mdx file fetch |
-| **Jina** | Fallback / API-based | Jina Reader API |
+| Adapter | Use Case | Method | Priority |
+|---------|----------|--------|----------|
+| **GitHub** | GitHub repositories | GitHub API + Raw URL | 1 |
+| **MDX** | Claude Docs, Vercel, Next.js | Direct .md/.mdx file fetch | 2 |
+| **Jina** | API-based (with `--use-jina` flag) | Jina Reader API | 3 |
+| **Playwright** | Most sites (default) | Headless browser rendering | 4 |
 
-The adapter is automatically selected based on the target site:
-
-- **MD Endpoint** is auto-enabled for: `docs.anthropic.com`, `docs.claude.com`, `code.claude.com`, `developers.openai.com`
-- Use `--use-md-endpoint` to force this adapter for other Stainless-powered documentation sites
-- Use `--use-jina` to use the Jina Reader API
+Adapters are automatically selected based on URL patterns. When a GitHub repository URL is detected, the GitHub adapter is used with highest priority.
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `JINA_API_KEY` | Optional. Jina Reader API key for higher rate limits |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GITHUB_TOKEN` | GitHub API token (increases rate limit from 60/hour to 5,000/hour) | none |
+| `JINA_API_KEY` | Jina Reader API key for higher rate limits | none |
+| `PRELUDEX_LOG_LEVEL` | Log level (`debug`, `info`, `warn`, `error`) | `info` |
+
+**Getting a GitHub Token:**
+1. Go to GitHub Settings → Developer settings → Personal access tokens
+2. Select "Generate new token (classic)"
+3. Select `public_repo` scope (for public repositories only)
+4. Generate and copy the token
+5. Set environment variable: `export GITHUB_TOKEN=ghp_your_token_here`
 
 ## Requirements
 
 - Node.js >= 18.0.0 or Bun >= 1.0.0
 - Playwright Chromium (auto-installed on first run)
 
-## License
-
-MIT
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-- Repository: https://github.com/thanks2music/preludex
-- Issues: https://github.com/thanks2music/preludex/issues
-
 ## Development
-
-### Setup
 
 ```bash
 # Install dependencies
 bun install
 
+# Run in development mode
+bun run dev <url>
+
 # Build
 bun run build
-
-# Run in development mode
-bun src/cli.ts <url> [options]
 ```
 
-### Release Workflow
+## Changelog
 
-This project uses GitHub Actions with [npm Trusted Publisher](https://docs.npmjs.com/generating-provenance-statements) (OIDC) for automated releases.
+See [CHANGELOG.md](CHANGELOG.md) for version history and detailed changes.
 
-```bash
-# 1. Commit your changes on a feature branch
-git add .
-git commit -m "your commit message"
+## Contributing
 
-# 2. Push to remote and create a PR
-git push origin <branch-name>
-gh pr create --title "your PR title"
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-# 3. After PR is merged, update local main
-git checkout main
-git pull origin main
+## License
 
-# 4. Bump version + create tag + push
-npm version patch  # or minor/major
-git push origin main --tags
-```
+MIT
 
-GitHub Actions will automatically:
-- Build the project
-- Publish to npm
-- Create a GitHub Release with auto-generated release notes
+## Links
+
+- [npm Package](https://www.npmjs.com/package/preludex)
+- [GitHub Repository](https://github.com/thanks2music/preludex)
+- [Issue Tracker](https://github.com/thanks2music/preludex/issues)
